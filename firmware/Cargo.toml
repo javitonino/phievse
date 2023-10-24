@@ -1,0 +1,40 @@
+[package]
+name = "phievse"
+version = "0.1.0"
+authors = ["Javier Torres <javier@javiertorres.eu>"]
+edition = "2021"
+resolver = "2"
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+default = ["native"]
+native = ["esp-idf-sys/native"]
+
+[dependencies]
+anyhow = { version = "1.0.56" }
+askama = "0.11"
+form_urlencoded = "1.0.1"
+log = "0.4.16"
+mockall = "0.11"
+enum-map = "2.1.0"
+embedded-hal = { version = "0.2", features = ["unproven"] }
+time = { version = "0.3", features = ["formatting"] }
+serde = "1.0"
+serde_json = "1.0"
+
+# Only when compiling for the ESP32-C3
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+esp-idf-sys = { version = "0.33", features = ["binstart"] }
+esp-idf-hal = { version = "0.41" }
+esp-idf-svc = { version = "0.46", features = ["experimental"] }
+embedded-svc = { version = "0.25", features = ["experimental"] }
+
+[build-dependencies]
+embuild = "0.27"
+anyhow = "1"

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>EVSE</title>
+    <link rel="stylesheet" href="/milligram.min.css">
+  </head>
+  <body>
+    <div id="header">
+      <a href="/" class="button{% if page != "status" %} button-clear{% endif %}">Status</a>
+      <a href="/log" class="button{% if page != "logs" %} button-clear{% endif %}">Logs</a>
+      <a href="/config" class="button{% if page != "config" %} button-clear{% endif %}">Config</a>
+      <a href="/ota" class="button{% if page != "ota" %} button-clear{% endif %}">OTA</a>
+    </div>
+    <div id="content" style="max-width: 1000px;">
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

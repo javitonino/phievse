@@ -1,0 +1,8 @@
+{
+    "state_topic": "phievse/state",
+    "unique_id": "phievse_power",
+    "name": "PhiEVSE Current Power",
+    "icon": "mdi:flash",
+    "unit_of_measurement": "W",
+    "value_template": "{{ value_json.power }}"
+}

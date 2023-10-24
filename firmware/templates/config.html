@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% if let Some(msg) = message %}<blockquote>{{ msg }}</blockquote>{% endif %}
+
+<form action="/config" method="POST">
+    <fieldset style="max-width: 800px;">
+        <label for="hostname">Hostname</label>
+        <input type="text" id="hostname" name="hostname" value="{{ config.hostname }}">
+
+        <label for="sta.ssid">Wifi client SSID</label>
+        <input type="text" id="sta.ssid" name="sta.ssid" {% if let Some(sta) = config.sta %}value="{{ sta.ssid }}"{% endif %}>
+
+        <label for="sta.psk">Wifi client password</label>
+        <input type="password" id="sta.psk" name="sta.psk" {% if let Some(WifiConfig {ssid: _, psk: Some(password)}) = config.sta %}value="{{ password }}"{% endif %}>
+            
+
+        <label for="ap.ssid">Wifi AP SSID</label>
+        <input type="text" id="ap.ssid" name="ap.ssid" value="{{ config.ap.ssid }}">
+
+        <label for="ap.psk">Wifi AP password</label>
+        <input type="password" id="ap.psk" name="ap.psk" {% if let Some(password) = config.ap.psk %}value="{{ password }}{% endif %}">
+
+        <label for="mqtt.uri">MQTT server URI</label>
+        <input type="text" id="mqtt.uri" name="mqtt.uri" {% if let Some(host) = config.mqtt_uri %}value="{{ host }}{% endif %}">
+    </fieldset>
+    <input type="submit" value="Save">
+</form>
+
+{% endblock %}

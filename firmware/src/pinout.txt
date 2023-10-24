@@ -1,0 +1,24 @@
++24V    0V     PE     Pilot      R(18)     R(6)
+
+
+RJ25   PE  Lpe(10)  N  Ln(19)  Ln(7)  Ln(5)
+
+GPIO
+====
+
+In (analog)
+-----------
+Current Meter: 0, 1, 3
+Pilot+: 4
+
+In (digital)
+------------
+Voltage Meter (PE): 10
+Voltage Meter (N): 19, 7, 5
+Pilot-: 9
+
+Out
+---
+LED: 8
+Relays: 18, 6
+PWM Pilot: 2

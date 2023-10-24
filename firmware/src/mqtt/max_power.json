@@ -1,0 +1,13 @@
+{
+    "command_topic": "phievse/max_power",
+    "state_topic": "phievse/state",
+    "unique_id": "phievse_max_power",
+    "name": "PhiEVSE Max Power",
+    "icon": "mdi:meter-electric",
+    "min": 0,
+    "max": 11000,
+    "step": 100,
+    "unit_of_measurement": "W",
+    "value_template": "{{ value_json.max_power }}"
+
+}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<table>
+    <thead>
+        <tr>
+            <th>Label</th>
+            <th>Version</th>
+            <th>Date</th>
+            <th>State</th>
+            <th>Boot</th>
+            <th>Running</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for partition in partitions %}
+        <tr>
+            <td>{{ partition.label }}</td>
+            <td>{{ partition.version }}</td>
+            <td>{{ partition.date }} {{ partition.time }}</td>
+            <td>{{ partition.state }}</td>
+            <td>{% if partition.boot %}X{% endif %}</td>
+            <td>{% if partition.running %}X{% endif %}</td>
+            <td>
+                {% if partition.state == "pending-verify" %}
+                    <form action="/ota/verify" method="POST">
+                        <input type="submit" class="button" value="Verify">
+                    </form>
+                {% else if !partition.boot %}
+                    <form action="/ota/boot" method="POST">
+                        <input type="hidden" name="label" value="{{ partition.label }}">
+                        <input type="submit" class="button" value="Set boot">
+                    </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<form action="/restart" method="POST">
+    <input type="submit" class="button" value="Restart">
+</form>
+{% endblock %}

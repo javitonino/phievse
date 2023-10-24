@@ -1,0 +1,1 @@
+espflash target/riscv32imc-esp-espidf/debug/phievse --speed 3000000 --bootloader ./target/riscv32imc-esp-espidf/debug/build/esp-idf-sys-*/out/build/bootloader/bootloader.bin --partition-table partitions.csv --erase-otadata

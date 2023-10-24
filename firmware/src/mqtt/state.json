@@ -1,0 +1,7 @@
+{
+    "state_topic": "phievse/state",
+    "unique_id": "phievse_state",
+    "name": "PhiEVSE State",
+    "icon": "mdi:state-machine",
+    "value_template": "{{ value_json.state }}"
+}

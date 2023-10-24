@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block content %}
+<table>
+    <tbody>
+        <tr>
+            <th>Status</th>
+            <td>{{ status.state }}</td>
+            <td>
+                <form action="/shutdown" method="POST">
+                    <input type="submit" class="button" value="Shutdown">
+                </form>
+            </td>
+        </tr>
+        <tr>
+            <th>Charging power</th>
+            <td>{{ status.power }} W</td>
+        </tr>
+        <tr>
+            <form action="/power" method="POST">
+                <th>Max power</th>
+                <td>
+                    <input name="max_power" id="max_power" type="number" value="{{ status.max_power }}" min="0" max="11000" step="100">
+                </td>
+                <td>
+                    <input type="submit" class="button" value="Apply">
+                </td>
+            </form>
+        </tr>
+    </tbody>
+</table>
+
+<form action="/restart" method="POST">
+    <input type="submit" class="button" value="Restart">
+</form>
+{% endblock %}
