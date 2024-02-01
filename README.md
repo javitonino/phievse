@@ -14,7 +14,7 @@ Charging power can be controlled via web interface or MQTT (integrated with Home
 
 ## Anti-features (you really shouldn't connect your car to this)
 
-Athough there are safety checks in place (pilot and relay checks), I haven't been able to test them outside of lab conditions. As such, this should not be considered a safe product to use,
+Although there are safety checks in place (pilot and relay checks), I haven't been able to test them outside of lab conditions. As such, this should not be considered a safe product to use,
 which is not ideal (to say the least) for something called Electric Vehicle Safety Equipment.
 
 In general, I lost interest in the project once it behaved well enough to fulfill my needs, so things are not as stable as they should. 
