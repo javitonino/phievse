@@ -1,4 +1,4 @@
-// #![feature(once_cell)]
+#![allow(unexpected_cfgs)]
 
 use embedded_svc::ipv4::Configuration;
 use embedded_svc::wifi::AccessPointConfiguration;
@@ -29,6 +29,8 @@ use embedded_svc::{ipv4::DHCPClientSettings, wifi::ClientConfiguration};
 use esp_idf_svc::{netif::NetifStack, wifi::EspWifi};
 
 use crate::config::*;
+
+esp_idf_sys::esp_app_desc! {}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Disables USB JTAG on GPIO 18/19. Allows to disable pullups in those pins.
