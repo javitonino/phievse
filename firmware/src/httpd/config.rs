@@ -1,9 +1,9 @@
 use askama::Template;
+use embedded_svc::http::server::Request;
 use embedded_svc::http::Method;
-use embedded_svc::http::server::{Request, HandlerResult};
 use embedded_svc::io::Write;
 use embedded_svc::utils::io::try_read_full;
-use esp_idf_svc::http::server::{EspHttpServer, EspHttpConnection};
+use esp_idf_svc::http::server::{EspHttpConnection, EspHttpServer};
 use esp_idf_sys::*;
 
 use crate::config::*;
@@ -16,17 +16,25 @@ struct ConfigTemplate<'a> {
     config: &'a PhiEvseConfig,
 }
 
-fn show(req: Request<&mut EspHttpConnection>, message: Option<&str>) -> HandlerResult {
+fn show(req: Request<&mut EspHttpConnection>, message: Option<&str>) -> Result<(), anyhow::Error> {
     let config = &PhiEvseConfig::load()?;
 
     let mut response = req.into_ok_response()?;
-    response.write_all(ConfigTemplate { message, config, page: "config" }.render()?.as_bytes())?;
+    response.write_all(
+        ConfigTemplate {
+            message,
+            config,
+            page: "config",
+        }
+        .render()?
+        .as_bytes(),
+    )?;
     Ok(())
 }
 
-fn save(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn save(mut req: Request<&mut EspHttpConnection>) -> Result<(), anyhow::Error> {
     let mut data = [0u8; 512];
-    let len = try_read_full(&mut req, &mut data)?;
+    let len = try_read_full(&mut req, &mut data).map_err(|e| e.0)?;
     let form = form_urlencoded::parse(&data[..len]);
 
     let mut hostname: Option<String> = None;
@@ -35,9 +43,11 @@ fn save(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
     let mut ap_ssid: Option<String> = None;
     let mut ap_psk: Option<String> = None;
     let mut mqtt_uri: Option<String> = None;
-    
+
     for (key, value) in form {
-        if value.is_empty() { continue }
+        if value.is_empty() {
+            continue;
+        }
         match key.as_ref() {
             "hostname" => hostname = Some(value.to_string()),
             "sta.ssid" => sta_ssid = Some(value.to_string()),
@@ -54,7 +64,10 @@ fn save(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
 
     let config = PhiEvseConfig {
         hostname: hostname.unwrap(),
-        ap: WifiConfig { ssid: ap_ssid.unwrap(), psk: ap_psk },
+        ap: WifiConfig {
+            ssid: ap_ssid.unwrap(),
+            psk: ap_psk,
+        },
         sta: sta_ssid.map(|ssid| WifiConfig { ssid, psk: sta_psk }),
         mqtt_uri,
     };
@@ -70,6 +83,6 @@ fn save(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
 pub fn register(httpd: &mut EspHttpServer) -> Result<(), EspError> {
     httpd.fn_handler("/config", Method::Get, |req| show(req, None))?;
     httpd.fn_handler("/config", Method::Post, save)?;
-    
+
     Ok(())
 }

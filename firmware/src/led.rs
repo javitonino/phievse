@@ -142,7 +142,7 @@ impl<T: LedDriver> LedControllerThread<T> {
         loop {
             let wait = {
                 let pattern = self.pattern.lock().unwrap_or_else(|e| {
-                    println!("Error mutex {}", e);
+                    println!("Error mutex {e}");
                     panic!("AHHHH");
                 });
                 i %= pattern.len();
@@ -167,7 +167,7 @@ impl<T: LedDriver> LedControllerThread<T> {
     fn set_color(&self, c: Color) {
         self.driver
             .set_rgb(c.r, c.g, c.b)
-            .unwrap_or_else(|e| println!("Could not set color: {}", e));
+            .unwrap_or_else(|e| println!("Could not set color: {e}"));
     }
 }
 

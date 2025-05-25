@@ -1,12 +1,17 @@
-use std::{sync::{Arc, Mutex, mpsc}, thread, time::Duration};
+use std::{
+    sync::{mpsc, Arc, Mutex},
+    thread,
+    time::Duration,
+};
 
+use anyhow::anyhow;
 use askama::Template;
 use embedded_svc::{http::server::*, io::Write, utils::io::try_read_full};
-use esp_idf_svc::{http::server::*, errors::EspIOError};
-use phievse::{logger::StringRingBuffer, PhiEvseStatus, ControlMessage};
+use esp_idf_svc::http::server::*;
+use phievse::{logger::StringRingBuffer, ControlMessage, PhiEvseStatus};
 
-mod ota;
 mod config;
+mod ota;
 
 #[derive(Template)]
 #[template(path = "log.html")]
@@ -22,13 +27,13 @@ struct StatusTemplate<'a> {
     status: &'a PhiEvseStatus,
 }
 
-fn milligram(req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn milligram(req: Request<&mut EspHttpConnection>) -> anyhow::Result<()> {
     let mut response = req.into_response(200, Some("OK"), &[("Content-Type", "text/css")])?;
     response.write_all(include_str!("../../templates/assets/milligram.min.css").as_bytes())?;
     Ok(())
 }
 
-fn ota_restart(req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn ota_restart(req: Request<&mut EspHttpConnection>) -> anyhow::Result<()> {
     thread::spawn(|| {
         thread::sleep(Duration::from_secs(1));
         unsafe { esp_idf_sys::esp_restart() };
@@ -37,34 +42,47 @@ fn ota_restart(req: Request<&mut EspHttpConnection>) -> HandlerResult {
     Ok(())
 }
 
-fn redirect(req: Request<&mut EspHttpConnection>, to: &str) -> HandlerResult {
+fn redirect(req: Request<&mut EspHttpConnection>, to: &str) -> anyhow::Result<()> {
     req.into_response(302, Some("Found"), &[("Location", to)])?;
 
     Ok(())
 }
 
-pub fn start<const S: usize>(log_buffer: Arc<Mutex<Box<StringRingBuffer<S>>>>, status: Arc<Mutex<PhiEvseStatus>>, control_channel: mpsc::Sender<ControlMessage>) -> Result<EspHttpServer, EspIOError> {
-    let mut httpd = EspHttpServer::new(&Configuration { ..Default::default() })?;
+pub fn start<'a, const S: usize>(
+    log_buffer: Arc<Mutex<Box<StringRingBuffer<S>>>>,
+    status: Arc<Mutex<PhiEvseStatus>>,
+    control_channel: mpsc::Sender<ControlMessage>,
+) -> anyhow::Result<EspHttpServer<'a>> {
+    let mut httpd = EspHttpServer::new(&Configuration {
+        ..Default::default()
+    })?;
 
     // Static
     httpd.fn_handler("/milligram.min.css", Method::Get, milligram)?;
 
     // Status
     let st = status.clone();
-    httpd.fn_handler("/", Method::Get, move |req| {
+    httpd.fn_handler("/", Method::Get, move |req| -> anyhow::Result<()> {
         let mut response = req.into_ok_response()?;
-        response.write_all(StatusTemplate { status: &*st.lock()?, page: "status" }.render()?.as_bytes())?;
+        response.write_all(
+            StatusTemplate {
+                status: &*st.lock().map_err(|_| anyhow!("Poisoned mutex"))?,
+                page: "status",
+            }
+            .render()?
+            .as_bytes(),
+        )?;
         Ok(())
     })?;
 
     let cc = control_channel.clone();
     httpd.fn_handler("/power", Method::Post, move |mut req| {
         let mut data = [0u8; 512];
-        let len = try_read_full(&mut req, &mut data)?;
+        let len = try_read_full(&mut req, &mut data).map_err(|e| e.0)?;
         let form = form_urlencoded::parse(&data[..len]);
         for (key, value) in form {
             if key == "max_power" {
-                cc.send(ControlMessage::SetMaxPower(value.parse()?))?;        
+                cc.send(ControlMessage::SetMaxPower(value.parse()?))?;
             }
         }
 
@@ -80,9 +98,16 @@ pub fn start<const S: usize>(log_buffer: Arc<Mutex<Box<StringRingBuffer<S>>>>, s
     httpd.fn_handler("/restart", Method::Post, ota_restart)?;
 
     // Logs
-    httpd.fn_handler("/log", Method::Get, move |req| {
+    httpd.fn_handler("/log", Method::Get, move |req| -> anyhow::Result<()> {
         let mut response = req.into_ok_response()?;
-        response.write_all(LogTemplate { messages: &*log_buffer.lock()?, page: "logs" }.render()?.as_bytes())?;
+        response.write_all(
+            LogTemplate {
+                messages: &*log_buffer.lock().map_err(|_| anyhow!("Poisoned mutex"))?,
+                page: "logs",
+            }
+            .render()?
+            .as_bytes(),
+        )?;
         Ok(())
     })?;
 

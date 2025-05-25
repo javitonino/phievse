@@ -3,75 +3,63 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread::{self, JoinHandle},};
+    thread::{self, JoinHandle},
+};
 
 use enum_map::{enum_map, EnumMap};
+use esp_idf_hal::{
+    adc::{Adc, AdcContConfig, AdcContDriver, AdcMeasurement, Attenuated, EmptyAdcChannels},
+    gpio::ADCPin,
+    peripheral::Peripheral,
+    units::Hertz,
+};
 
 use crate::adc::*;
 use esp_idf_sys::*;
 
 // Minimum frequency to measure 1kHz PWM at 10% duty = 10kHz. Multiply by 4 inputs
-const SAMPLING_FREQ_HZ: u32 = 10000 * 4;
-
-// Max items to convert in one go
-const DMA_BUFFER_SIZE_ITEMS: usize = 400;
-const DMA_BUFFER_SIZE_BYTES: usize = DMA_BUFFER_SIZE_ITEMS * 4;
+const SAMPLING_FREQ_HZ: Hertz = Hertz(10000 * 4);
 
 pub struct AdcDmaDriver {
-    channels: EnumMap<AdcChannel, u8>,
+    adc: Option<AdcContDriver<'static>>,
+    channels: EnumMap<AdcChannel, u32>,
     shutdown: Arc<AtomicBool>,
     join_handle: Option<JoinHandle<()>>,
 }
 
 impl AdcDmaDriver {
-    pub fn new(l1_ch: u8, l2_ch: u8, l3_ch: u8, cp_ch: u8) -> Result<Self, EspError> {
-        let channels = [l1_ch, l2_ch, l3_ch, cp_ch];
+    pub fn new<A: Adc + 'static>(
+        adc: impl Peripheral<P = A> + 'static,
+        l1_ch: impl ADCPin<Adc = A>,
+        l2_ch: impl ADCPin<Adc = A>,
+        l3_ch: impl ADCPin<Adc = A>,
+        cp_ch: impl ADCPin<Adc = A>,
+    ) -> Result<Self, EspError> {
         // Configure ADC unit
         log::info!("Initializing ADC");
-        let adc_config = adc_digi_init_config_s {
-            max_store_buf_size: DMA_BUFFER_SIZE_BYTES as u32,
-            conv_num_each_intr: DMA_BUFFER_SIZE_ITEMS as u32,
-            adc1_chan_mask: channels.iter().fold(0, |acc, c| acc | (1 << c)),
-            adc2_chan_mask: 0,
+        let channels = enum_map! {
+            AdcChannel::CurrentL1 => l1_ch.adc_channel(),
+            AdcChannel::CurrentL2 => l2_ch.adc_channel(),
+            AdcChannel::CurrentL3 => l3_ch.adc_channel(),
+            AdcChannel::ControlPilot => cp_ch.adc_channel(),
         };
-        esp!(unsafe { adc_digi_initialize(&adc_config) })?;
-
-        // Configure DMA patterns
-        log::info!("Initializing ADC DMA driver");
-        let mut patterns = channels
-            .iter()
-            .map(|c| adc_digi_pattern_config_t {
-                atten: adc_atten_t_ADC_ATTEN_DB_11 as u8,
-                channel: *c,
-                unit: 0,
-                bit_width: 12
-            })
-            .collect::<Vec<adc_digi_pattern_config_t>>();
-
-        let dma_config = adc_digi_configuration_t {
-            sample_freq_hz: SAMPLING_FREQ_HZ,
-            conv_limit_en: false,
-            conv_limit_num: 0,
-            pattern_num: channels.len() as u32,
-            adc_pattern: patterns.as_mut_ptr(),
-            conv_mode: adc_digi_convert_mode_t_ADC_CONV_SINGLE_UNIT_1,
-            format: adc_digi_output_format_t_ADC_DIGI_OUTPUT_FORMAT_TYPE2
-        };
-        esp!(unsafe { adc_digi_controller_configure(&dma_config) })?;
+        let config = AdcContConfig::default()
+            .sample_freq(SAMPLING_FREQ_HZ)
+            .frame_measurements(100)
+            .frames_count(10);
+        let channel_config = EmptyAdcChannels::chain(Attenuated::db11(l1_ch))
+            .chain(Attenuated::db11(l2_ch))
+            .chain(Attenuated::db11(l3_ch))
+            .chain(Attenuated::db11(cp_ch));
+        let adc = AdcContDriver::new(adc, &config, channel_config)?;
 
         log::info!("Starting ADC DMA thread");
-        esp!(unsafe { adc_digi_start() })?;
+        // adc.start()?;
 
         let shutdown = Arc::new(AtomicBool::new(false));
 
-        let channels = enum_map! {
-            AdcChannel::CurrentL1 => l1_ch,
-            AdcChannel::CurrentL2 => l2_ch,
-            AdcChannel::CurrentL3 => l3_ch,
-            AdcChannel::ControlPilot => cp_ch,
-        };
-
         Ok(Self {
+            adc: Some(adc),
             channels,
             join_handle: None,
             shutdown,
@@ -80,8 +68,12 @@ impl AdcDmaDriver {
 }
 
 impl AdcSubscriber for AdcDmaDriver {
-    fn subscribe(&mut self, receiver: impl FnMut(AdcChannel, &mut dyn Iterator<Item = u32>) + Send + 'static) {
+    fn subscribe(
+        &mut self,
+        receiver: impl FnMut(AdcChannel, &mut dyn Iterator<Item = i32>) + Send + 'static,
+    ) {
         let mut thread = AdcDmaThread {
+            adc: self.adc.take().unwrap(),
             channels: self.channels,
             shutdown: self.shutdown.clone(),
             receiver,
@@ -99,20 +91,16 @@ impl Drop for AdcDmaDriver {
     }
 }
 
-struct AdcDmaThread<R: FnMut(AdcChannel, &mut dyn Iterator<Item = u32>)> {
-    channels: EnumMap<AdcChannel, u8>,
+struct AdcDmaThread<'a, R: FnMut(AdcChannel, &mut dyn Iterator<Item = i32>)> {
+    adc: AdcContDriver<'a>,
+    channels: EnumMap<AdcChannel, u32>,
     shutdown: Arc<AtomicBool>,
     receiver: R,
 }
 
-impl<R: FnMut(AdcChannel, &mut dyn Iterator<Item = u32>)> AdcDmaThread<R> {
+impl<'a, R: FnMut(AdcChannel, &mut dyn Iterator<Item = i32>)> AdcDmaThread<'a, R> {
     pub fn run(&mut self) {
-        let mut buf: Box<[adc_digi_output_data_t; DMA_BUFFER_SIZE_ITEMS]> =
-            Box::new([Default::default(); DMA_BUFFER_SIZE_ITEMS]);
-        let mut len: u32 = 0;
-
-        // Get ADC characteristics to convert readings to mV
-        let mut chars = esp_adc_cal_characteristics_t { ..Default::default() };
+        let mut chars = esp_adc_cal_characteristics_t::default();
         unsafe {
             esp_adc_cal_characterize(
                 1,
@@ -123,27 +111,22 @@ impl<R: FnMut(AdcChannel, &mut dyn Iterator<Item = u32>)> AdcDmaThread<R> {
             );
         }
 
-        // Read from ADC, split by channel and send to subscriber
+        self.adc.start().unwrap();
+        let mut values = [AdcMeasurement::default(); 100];
         loop {
             if self.shutdown.load(Ordering::Relaxed) {
                 break;
             };
 
-            unsafe { adc_digi_read_bytes(buf.as_mut_ptr() as *mut u8, DMA_BUFFER_SIZE_BYTES as u32, &mut len, 50) };
-
-            let iter = buf[0..(len / 4) as usize].iter();
-            for (channel, ch) in self.channels {
-                (self.receiver)(
-                    channel,
-                    &mut iter.clone().filter_map(|d| {
-                        let d = unsafe { d.__bindgen_anon_1.type2 };
-                        if d.channel() == ch as u32 {
-                            Some(d.data() * chars.coeff_a / 65536)
-                        } else {
-                            None
-                        }
-                    }),
-                );
+            if let Ok(num_read) = self.adc.read(&mut values, 10) {
+                let iter = &values[0..num_read].iter();
+                for (channel, ch) in self.channels {
+                    let mut filtered_it = iter.clone().filter_map(|d| {
+                        (d.channel() == ch)
+                            .then_some((d.data() as u32 * chars.coeff_a / 65536) as i32)
+                    });
+                    (self.receiver)(channel, &mut filtered_it)
+                }
             }
         }
     }

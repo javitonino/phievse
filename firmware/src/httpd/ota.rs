@@ -1,11 +1,11 @@
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, Mutex};
 
 use askama::Template;
+use embedded_svc::http::server::Request;
 use embedded_svc::http::Method;
-use embedded_svc::http::server::{Request, HandlerResult};
 use embedded_svc::io::Write;
 use embedded_svc::ota::*;
-use esp_idf_svc::http::server::{EspHttpServer, EspHttpConnection};
+use esp_idf_svc::http::server::{EspHttpConnection, EspHttpServer};
 use esp_idf_svc::ota::EspOta;
 use esp_idf_sys::*;
 use phievse::{PhiEvseState, PhiEvseStatus};
@@ -27,24 +27,24 @@ struct OtaInfoTemplate<'a> {
     partitions: Vec<PartitionInfo<'a>>,
 }
 
-fn str_from_c(cstr: &[i8]) -> &str {
+fn str_from_c(cstr: &[u8]) -> &str {
     unsafe { std::ffi::CStr::from_ptr(cstr.as_ptr()) }
         .to_str()
         .unwrap_or("")
 }
 
-fn redirect(req: Request<&mut EspHttpConnection>, to: &str) -> HandlerResult {
+fn redirect(req: Request<&mut EspHttpConnection>, to: &str) -> anyhow::Result<()> {
     req.into_response(302, Some("Found"), &[("Location", to)])?;
 
     Ok(())
 }
 
-fn ota_info(req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn ota_info(req: Request<&mut EspHttpConnection>) -> anyhow::Result<()> {
     let mut iterator = unsafe {
         esp_idf_sys::esp_partition_find(
             esp_idf_sys::esp_partition_type_t_ESP_PARTITION_TYPE_APP,
             esp_idf_sys::esp_partition_subtype_t_ESP_PARTITION_SUBTYPE_ANY,
-            std::ptr::null::<i8>(),
+            std::ptr::null::<u8>(),
         )
     };
 
@@ -56,7 +56,9 @@ fn ota_info(req: Request<&mut EspHttpConnection>) -> HandlerResult {
     while !iterator.is_null() {
         let partition_ptr = unsafe { esp_partition_get(iterator) };
 
-        let mut app_desc = esp_app_desc_t { ..Default::default() };
+        let mut app_desc = esp_app_desc_t {
+            ..Default::default()
+        };
         unsafe { esp_ota_get_partition_description(partition_ptr, &mut app_desc) };
 
         let mut state: esp_ota_img_states_t = 0;
@@ -89,16 +91,23 @@ fn ota_info(req: Request<&mut EspHttpConnection>) -> HandlerResult {
     }
 
     let mut response = req.into_ok_response()?;
-    response.write_all(OtaInfoTemplate { partitions, page: "ota" }.render()?.as_bytes())?;
+    response.write_all(
+        OtaInfoTemplate {
+            partitions,
+            page: "ota",
+        }
+        .render()?
+        .as_bytes(),
+    )?;
     Ok(())
 }
 
-fn ota_complete(req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn ota_complete(req: Request<&mut EspHttpConnection>) -> anyhow::Result<()> {
     unsafe { esp_idf_sys::esp_ota_mark_app_valid_cancel_rollback() };
     redirect(req, "/ota")
 }
 
-fn ota_update(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn ota_update(mut req: Request<&mut EspHttpConnection>) -> anyhow::Result<()> {
     // Do the OTA
     let mut ota = EspOta::new()?;
     let update = ota.initiate_update()?;
@@ -107,7 +116,7 @@ fn ota_update(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
     Ok(())
 }
 
-fn ota_set_boot(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
+fn ota_set_boot(mut req: Request<&mut EspHttpConnection>) -> anyhow::Result<()> {
     let mut buf = [0u8; 128];
     let len = req.read(&mut buf)?;
     let mut form = form_urlencoded::parse(&buf[..len]);
@@ -125,7 +134,10 @@ fn ota_set_boot(mut req: Request<&mut EspHttpConnection>) -> HandlerResult {
     redirect(req, "/ota")
 }
 
-pub fn register(httpd: &mut EspHttpServer, status: Arc<Mutex<PhiEvseStatus>>) -> Result<(), EspError> {
+pub fn register(
+    httpd: &mut EspHttpServer,
+    status: Arc<Mutex<PhiEvseStatus>>,
+) -> Result<(), EspError> {
     httpd.fn_handler("/ota", Method::Get, ota_info)?;
     httpd.fn_handler("/ota/verify", Method::Post, ota_complete)?;
     httpd.fn_handler("/ota/update", Method::Post, move |req| {

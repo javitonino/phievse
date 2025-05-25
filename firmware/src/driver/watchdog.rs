@@ -7,7 +7,12 @@ pub struct EspWatchdog;
 impl Watchdog for EspWatchdog {
     fn init(&self, timeout: std::time::Duration) {
         unsafe {
-            esp_task_wdt_init(timeout.as_secs() as u32, true);
+            let config = esp_task_wdt_config_t {
+                timeout_ms: timeout.as_millis() as u32,
+                idle_core_mask: 1,
+                trigger_panic: true,
+            };
+            esp_task_wdt_init(&config);
             esp_task_wdt_add(std::ptr::null_mut());
         }
     }
@@ -17,7 +22,9 @@ impl Watchdog for EspWatchdog {
     }
 
     fn stop(&self) {
-        // I am not able to deinitialize the timer, so I just set a long timeout
-        unsafe { esp_task_wdt_init(300, true) };
+        unsafe {
+            esp_task_wdt_delete(std::ptr::null_mut());
+            esp_task_wdt_deinit();
+        };
     }
 }

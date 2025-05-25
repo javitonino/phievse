@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::{AtomicBool, AtomicI32};
 
 use embedded_hal::PwmPin;
 
@@ -25,7 +25,7 @@ fn current_to_duty(ma: u32) -> u32 {
         6000..=10999 => 17 * ma / 1000 + 110,
         11000..=13499 => 5051 + ma * ma / 100 * 368 / 100000 - 837 * ma / 1000,
         13500..=32000 => 235 * ma / 1000 - 2713,
-        _ => 0
+        _ => 0,
     }
 }
 
@@ -39,12 +39,12 @@ pub enum ControlPilotMode {
 
 #[derive(Default)]
 pub struct ControlPilotReader {
-    cp_mv: AtomicU32,
+    cp_mv: AtomicI32,
     pub negative: AtomicBool,
 }
 
 impl ControlPilotReader {
-    pub fn receive(&self, data: &mut dyn Iterator<Item = u32>) {
+    pub fn receive(&self, data: &mut dyn Iterator<Item = i32>) {
         if let Some(max) = data.max() {
             self.cp_mv.store(max, std::sync::atomic::Ordering::Relaxed);
         }
@@ -57,8 +57,8 @@ impl ControlPilotReader {
         // }
         let x = self.cp_mv.load(std::sync::atomic::Ordering::Relaxed);
         match x {
-            0..=50 => ControlPilotMode::NotConnected, // < 10
-            51..=650 => ControlPilotMode::Connected, // ~ 450
+            i32::MIN..=50 => ControlPilotMode::NotConnected, // < 10
+            51..=650 => ControlPilotMode::Connected,         // ~ 450
             651.. => ControlPilotMode::Ready, // ~ 1300 (normal) // ~ 2600 (ventilation)
         }
     }
@@ -66,12 +66,12 @@ impl ControlPilotReader {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::RangeInclusive;
     use crate::control_pilot::current_to_duty;
+    use std::ops::RangeInclusive;
 
     #[test]
     fn empirical_values() {
-        const TEST_VALUES: [(u32,RangeInclusive<u32>);11] = [
+        const TEST_VALUES: [(u32, RangeInclusive<u32>); 11] = [
             (6, 211..=213),
             (7, 215..=230),
             (8, 240..=250),

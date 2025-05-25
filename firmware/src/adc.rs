@@ -9,5 +9,8 @@ pub enum AdcChannel {
 }
 
 pub trait AdcSubscriber {
-    fn subscribe(&mut self, receiver: impl FnMut(AdcChannel, &mut dyn Iterator<Item = u32>) + Send + 'static);
+    fn subscribe(
+        &mut self,
+        receiver: impl FnMut(AdcChannel, &mut dyn Iterator<Item = i32>) + Send + 'static,
+    );
 }

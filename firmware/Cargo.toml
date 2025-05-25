@@ -9,7 +9,7 @@ resolver = "2"
 opt-level = "s"
 
 [profile.dev]
-debug = true # Symbols are nice and they don't increase the size on Flash
+debug = true    # Symbols are nice and they don't increase the size on Flash
 opt-level = "z"
 
 [features]
@@ -30,11 +30,11 @@ serde_json = "1.0"
 
 # Only when compiling for the ESP32-C3
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-esp-idf-sys = { version = "0.33", features = ["binstart"] }
-esp-idf-hal = { version = "0.41" }
-esp-idf-svc = { version = "0.46", features = ["experimental"] }
-embedded-svc = { version = "0.25", features = ["experimental"] }
+esp-idf-sys = { version = "0.36", features = ["binstart"] }
+esp-idf-hal = { version = "0.45" }
+esp-idf-svc = { version = "0.51", features = ["experimental"] }
+embedded-svc = { version = "0.28", features = ["experimental"] }
 
 [build-dependencies]
-embuild = "0.27"
+embuild = "0.33"
 anyhow = "1"
