@@ -278,6 +278,15 @@ where
                             .set_level_and_wait(self.three_phase);
                         self.peripherals.relay_main.set_level(true);
                         self.state = PhiEvseState::Charging;
+                    } else {
+                        // We can end up here if max current is resetted while car is ready to charge
+                        // This can happen if we suddenly change the max power during charge start-up
+                        self.state = match cp_state {
+                            ControlPilotMode::NotConnected => PhiEvseState::NotConnected,
+                            ControlPilotMode::Connected => PhiEvseState::Connected,
+                            ControlPilotMode::Ready => PhiEvseState::Ready,
+                            ControlPilotMode::Error => PhiEvseState::Error,
+                        };
                     }
                 }
                 PhiEvseState::Charging => {
