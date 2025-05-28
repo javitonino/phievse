@@ -1,6 +1,6 @@
 [package]
 name = "phievse"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Javier Torres <javier@javiertorres.eu>"]
 edition = "2024"
 resolver = "3"

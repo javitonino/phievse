@@ -1,12 +1,12 @@
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
 };
 
-use enum_map::{enum_map, EnumMap};
+use enum_map::{EnumMap, enum_map};
 use esp_idf_hal::{
     adc::{Adc, AdcContConfig, AdcContDriver, AdcMeasurement, Attenuated, EmptyAdcChannels},
     gpio::ADCPin,
@@ -45,16 +45,13 @@ impl AdcDmaDriver {
         };
         let config = AdcContConfig::default()
             .sample_freq(SAMPLING_FREQ_HZ)
-            .frame_measurements(100)
+            .frame_measurements(400)
             .frames_count(10);
         let channel_config = EmptyAdcChannels::chain(Attenuated::db11(l1_ch))
             .chain(Attenuated::db11(l2_ch))
             .chain(Attenuated::db11(l3_ch))
             .chain(Attenuated::db11(cp_ch));
         let adc = AdcContDriver::new(adc, &config, channel_config)?;
-
-        log::info!("Starting ADC DMA thread");
-        // adc.start()?;
 
         let shutdown = Arc::new(AtomicBool::new(false));
 
@@ -100,6 +97,7 @@ struct AdcDmaThread<'a, R: FnMut(AdcChannel, &mut dyn Iterator<Item = i32>)> {
 
 impl<'a, R: FnMut(AdcChannel, &mut dyn Iterator<Item = i32>)> AdcDmaThread<'a, R> {
     pub fn run(&mut self) {
+        log::info!("Starting ADC DMA thread");
         let mut chars = esp_adc_cal_characteristics_t::default();
         unsafe {
             esp_adc_cal_characterize(

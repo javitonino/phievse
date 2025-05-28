@@ -1,14 +1,15 @@
 use adc::{AdcChannel, AdcSubscriber};
-use control_pilot::{set_control_pilot, ControlPilotMode, ControlPilotReader, ControlPilotSignal};
+use control_pilot::{ControlPilotMode, ControlPilotReader, ControlPilotSignal, set_control_pilot};
 use current_meter::CurrentMeter;
-use embedded_hal::{digital::v2::InputPin, PwmPin};
+use embedded_hal::{PwmPin, digital::v2::InputPin};
 use serde::Serialize;
 use std::{
     cmp::min,
     fmt::Display,
     sync::{
+        Arc, Mutex,
         atomic::{AtomicU32, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc,
     },
     thread::sleep,
     time::Duration,
@@ -205,6 +206,9 @@ where
             i = (i + 1) % 50;
             self.peripherals.watchdog.reset();
 
+            let total_mamps: u32 = self.current.iter().map(|c| c.load(Ordering::Relaxed)).sum();
+            self.status.lock().unwrap().power = total_mamps * 230 / 1000;
+
             // Receive commands
             if let Ok(msg) = self.control_rx.try_recv() {
                 match msg {
@@ -289,9 +293,6 @@ where
                         }
                     }
 
-                    let total_mamps: u32 =
-                        self.current.iter().map(|c| c.load(Ordering::Relaxed)).sum();
-                    self.status.lock().unwrap().power = total_mamps * 230 / 1000;
                     if i == 0 {
                         log::info!(
                             "Charging at {:?} mamps / ADJ = {}",

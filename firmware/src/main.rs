@@ -78,7 +78,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             .resolution(Resolution::Bits14),
     )?;
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
     let mut g10 = PinDriver::input(pins.gpio10)?;
     g10.set_pull(Pull::Floating)?;
     let mut g19 = PinDriver::input(pins.gpio19)?;
